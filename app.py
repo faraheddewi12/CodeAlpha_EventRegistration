@@ -1,16 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 
-# Initialize Flask app
 app = Flask(__name__)
-
-# Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.db'
 db = SQLAlchemy(app)
 
-# ---------- MODELS ----------
-
-# Event model: represents an event
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -18,20 +12,15 @@ class Event(db.Model):
     location = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(300))
 
-# Registration model: links a user to an event
 class Registration(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_name = db.Column(db.String(100), nullable=False)
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
     event = db.relationship('Event', backref=db.backref('registrations', lazy=True))
 
-# ---------- DATABASE CREATION ----------
 with app.app_context():
     db.create_all()
 
-# ---------- ROUTES ----------
-
-# View all events
 @app.route('/events', methods=['GET'])
 def get_events():
     events = Event.query.all()
@@ -43,7 +32,6 @@ def get_events():
         'description': e.description
     } for e in events])
 
-# Add a new event
 @app.route('/event', methods=['POST'])
 def add_event():
     data = request.get_json()
@@ -57,7 +45,6 @@ def add_event():
     db.session.commit()
     return jsonify({'message': 'Event added successfully!'})
 
-# Register a user for an event
 @app.route('/register', methods=['POST'])
 def register_user():
     data = request.get_json()
@@ -69,7 +56,6 @@ def register_user():
     db.session.commit()
     return jsonify({'message': f"{data['user_name']} registered for event ID {data['event_id']}"})
 
-# View all registrations
 @app.route('/registrations', methods=['GET'])
 def get_registrations():
     regs = Registration.query.all()
@@ -79,7 +65,6 @@ def get_registrations():
         'event': r.event.name
     } for r in regs])
 
-# Cancel a registration
 @app.route('/cancel/<int:reg_id>', methods=['DELETE'])
 def cancel_registration(reg_id):
     reg = Registration.query.get(reg_id)
@@ -89,6 +74,5 @@ def cancel_registration(reg_id):
     db.session.commit()
     return jsonify({'message': 'Registration cancelled successfully'})
 
-# ---------- RUN THE APP ----------
 if __name__ == '__main__':
     app.run(debug=True)
