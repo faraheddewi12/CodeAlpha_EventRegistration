@@ -4,7 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.db'
 db = SQLAlchemy(app)
-
+#hhhh
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -19,7 +19,7 @@ class Registration(db.Model):
     event = db.relationship('Event', backref=db.backref('registrations', lazy=True))
 
 with app.app_context():
-    db.create_all()
+    db.create_all() 
 
 @app.route('/events', methods=['GET'])
 def get_events():
