@@ -1,9 +1,17 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
+from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.db'
+app.config['SECRET_KEY'] = 'supersecretkey'
 db = SQLAlchemy(app)
+bcrypt = Bcrypt(app)
+
+class Admin(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
 
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -21,19 +29,39 @@ class Registration(db.Model):
 with app.app_context():
     db.create_all()
 
-@app.route('/events', methods=['GET'])
-def get_events():
-    events = Event.query.all()
-    return jsonify([{
-        'id': e.id,
-        'name': e.name,
-        'date': e.date,
-        'location': e.location,
-        'description': e.description
-    } for e in events])
+@app.route('/admin/register', methods=['POST'])
+def register_admin():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    if Admin.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already exists'}), 400
+    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+    new_admin = Admin(username=username, password=hashed_pw)
+    db.session.add(new_admin)
+    db.session.commit()
+    return jsonify({'message': 'Admin registered successfully!'})
 
-@app.route('/event', methods=['POST'])
+@app.route('/admin/login', methods=['POST'])
+def login_admin():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    admin = Admin.query.filter_by(username=username).first()
+    if admin and bcrypt.check_password_hash(admin.password, password):
+        session['admin'] = username
+        return jsonify({'message': f'Welcome back, {username}!'})
+    return jsonify({'error': 'Invalid username or password'}), 401
+
+@app.route('/admin/logout', methods=['POST'])
+def logout_admin():
+    session.pop('admin', None)
+    return jsonify({'message': 'Logged out successfully'})
+
+@app.route('/admin/add_event', methods=['POST'])
 def add_event():
+    if 'admin' not in session:
+        return jsonify({'error': 'Unauthorized. Please log in as admin.'}), 401
     data = request.get_json()
     new_event = Event(
         name=data['name'],
@@ -43,36 +71,20 @@ def add_event():
     )
     db.session.add(new_event)
     db.session.commit()
-    return jsonify({'message': 'Event added successfully!'})
+    return jsonify({'message': f"Event '{data['name']}' added by {session['admin']}!"})
 
-@app.route('/register', methods=['POST'])
-def register_user():
-    data = request.get_json()
-    registration = Registration(
-        user_name=data['user_name'],
-        event_id=data['event_id']
-    )
-    db.session.add(registration)
-    db.session.commit()
-    return jsonify({'message': f"{data['user_name']} registered for event ID {data['event_id']}"})
-
-@app.route('/registrations', methods=['GET'])
-def get_registrations():
-    regs = Registration.query.all()
+@app.route('/admin/events', methods=['GET'])
+def view_all_events():
+    if 'admin' not in session:
+        return jsonify({'error': 'Unauthorized. Please log in as admin.'}), 401
+    events = Event.query.all()
     return jsonify([{
-        'id': r.id,
-        'user_name': r.user_name,
-        'event': r.event.name
-    } for r in regs])
-
-@app.route('/cancel/<int:reg_id>', methods=['DELETE'])
-def cancel_registration(reg_id):
-    reg = Registration.query.get(reg_id)
-    if not reg:
-        return jsonify({'error': 'Registration not found'}), 404
-    db.session.delete(reg)
-    db.session.commit()
-    return jsonify({'message': 'Registration cancelled successfully'})
+        'id': e.id,
+        'name': e.name,
+        'date': e.date,
+        'location': e.location,
+        'description': e.description
+    } for e in events])
 
 if __name__ == '__main__':
     app.run(debug=True)
